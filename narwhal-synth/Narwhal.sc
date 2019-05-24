@@ -6,12 +6,14 @@ Narwhal {
   var fx;
 
   var tonic;
+  var defaultOctave;
   var scale;
 
   init { | s, debug = false |
     logger = NarwhalLogger.new.init(debug);
     this.defineSynths;
     tonic = 36;
+    defaultOctave = 2;
     scale = Scale.minor;
   }
 
@@ -37,19 +39,24 @@ Narwhal {
 
   }
 
-  playSynth { | n, octave, note |
-    if (note.notNil && octave.notNil, {
-      this.actionSynth(n, { | synth |
-        logger.debug("Playing synth %".format(n));
-
-        Routine {
-          synth.set(\freq, scale.degreeToFreq(note, tonic.midicps, octave));
-          synth.set(\gate, 1);
-          0.01.wait;
-          synth.set(\gate, 0);
-        }.play;
+  playSynth { | n, note, octave |
+    this.actionSynth(n, { | synth |
+      if (note.isNil, {
+        logger.error("No note given");
+        ^n;
       });
-    }, { logger.error("No note or octave given to play") });
+      if (octave.isNil {
+        octave = defaultOctave;
+      });
+      logger.debug("Playing synth %".format(n));
+      Routine {
+        synth.set(\freq, scale.degreeToFreq(note, tonic.midicps, octave));
+        synth.set(\gate, 1);
+        0.01.wait;
+        synth.set(\gate, 0);
+      }.play;
+    });
+
   }
 
   defineSynths {
