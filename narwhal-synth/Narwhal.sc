@@ -3,6 +3,7 @@ Narwhal {
 
   var logger;
   var synths;
+  var fx;
 
   var tonic;
   var scale;
@@ -54,6 +55,11 @@ Narwhal {
   defineSynths {
     logger.log("Defining synths");
 
+    SynthDef(\narwhalFX, {
+      arg in, out=0;
+      Out.ar(out, In.ar(in));
+    }).add;
+
     // copied from https://sccode.org/1-4Wy
     SynthDef(\narwhalSynth, {
       arg out=0, freq=440, wave=0, ctf=100, res=0.2,
@@ -80,8 +86,10 @@ Narwhal {
   setupAudio { | voiceCount |
     logger.log("Setting up audio");
 
+    fx = Synth(\narwhalFX, [\in, 1]);
+
     synths = voiceCount.collect { | c |
-      Synth(\narwhalSynth);
+      Synth(\narwhalSynth, [\out, 1]);
     };
   }
 
