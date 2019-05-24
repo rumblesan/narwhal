@@ -8,6 +8,7 @@ Narwhal {
   var tonic;
   var defaultOctave;
   var scale;
+  var paramMap;
 
   init { | s, debug = false |
     logger = NarwhalLogger.new.init(debug);
@@ -37,6 +38,21 @@ Narwhal {
       this.playSynth(msg[1], msg[2], msg[3]);
     }, '/n', NetAddr("localhost"), oscPort);
 
+    OSCFunc({ |msg|
+      this.setSynthParam(msg[1], msg[2], msg[3]);
+    }, '/p', NetAddr("localhost"), oscPort);
+
+  }
+
+  setupParamMap {
+    paramMap = Dictionary.new;
+    paramMap.put(0, \wave);
+    paramMap.put(1, \cutoff);
+    paramMap.put(2, \resonance);
+    paramMap.put(3, \sustain);
+    paramMap.put(4, \decay);
+    paramMap.put(5, \envelope);
+    paramMap.put(6, \volume);
   }
 
   playSynth { | n, note, octave |
@@ -59,9 +75,13 @@ Narwhal {
   }
 
   setSynthParam { | n, param, value |
-    if (param.isNil || value.isNil, {
-      logger.error("No param name or value given");
-      ^n;
+    this.actionSynth(n, { | synth |
+      if (param.isNil || value.isNil, {
+        logger.error("No param name or value given");
+        ^n;
+      });
+      paramName = paramMap[param];
+      synth.set(paramName, value/35);
     });
   }
 
@@ -75,23 +95,23 @@ Narwhal {
 
     // copied from https://sccode.org/1-4Wy
     SynthDef(\narwhalSynth, {
-      arg out=0, freq=440, wave=0, ctf=100, res=0.2,
-          sus=0, dec=1.0, env=1000, gate=0, vol=0.2;
+      arg out=0, freq=440, wave=0, cutoff=100, resonance=0.2,
+          sustain=0, decay=1.0, envelope=1000, gate=0, volume=0.2;
       var filEnv, volEnv, waves;
 
       volEnv = EnvGen.ar(
-        Env.new([10e-10, 1, 1, 10e-10], [0.01, sus, dec], 'exp'),
+        Env.new([10e-10, 1, 1, 10e-10], [0.01, sustain, decay], 'exp'),
         gate);
       filEnv = EnvGen.ar(
-        Env.new([10e-10, 1, 10e-10], [0.01, dec], 'exp'),
+        Env.new([10e-10, 1, 10e-10], [0.01, decay], 'exp'),
         gate);
       waves = [Saw.ar(freq, volEnv), Pulse.ar(freq, 0.5, volEnv)];
 
       Out.ar(out, RLPF.ar(
         Select.ar(wave, waves),
-        ctf + (filEnv * env),
-        res
-      ).dup * vol);
+        cutoff + (filEnv * envelope),
+        resonance
+      ).dup * volume);
     }).add;
 
   }
