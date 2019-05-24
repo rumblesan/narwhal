@@ -56,7 +56,13 @@ Narwhal {
         synth.set(\gate, 0);
       }.play;
     });
+  }
 
+  setSynthParam { | n, param, value |
+    if (param.isNil || value.isNil, {
+      logger.error("No param name or value given");
+      ^n;
+    });
   }
 
   defineSynths {
