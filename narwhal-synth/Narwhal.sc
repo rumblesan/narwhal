@@ -3,7 +3,8 @@ Narwhal {
 
   var logger;
   var synths;
-  var fx;
+  var synthFX;
+  var drumFX;
 
   var tonic;
   var defaultOctave;
@@ -70,6 +71,15 @@ Narwhal {
       });
     }, '/f', NetAddr("localhost"), oscPort);
 
+    OSCFunc({ | msg |
+      var instrument = msg[1];
+      if (instrument.notNil, {
+        this.playDrum(instrument);
+      }, {
+        logger.error("Invalid fx drum instrument");
+      });
+    }, '/d', NetAddr("localhost"), oscPort);
+
   }
 
   setupParamMap {
@@ -119,6 +129,14 @@ Narwhal {
     });
   }
 
+	playDrum { | n |
+		switch(n,
+			0, { Synth(\narwhalKick, [\out, 3]) },
+			1, { Synth(\narwhalSnare, [\out, 3]) },
+			2, { Synth(\narwhalHat, [\out, 3]) }
+		);
+	}
+
   setSynthParam { | n, param, value |
     this.actionSynth(n, { | synth |
       var paramName = paramMap[param];
@@ -132,13 +150,46 @@ Narwhal {
     var paramName = fxParamMap[param];
     var scaledValue = fxScaleFuncs[paramName].value(value);
     logger.debug("Setting fx % to %".format(paramName, scaledValue));
-    fx.set(paramName, scaledValue);
+    synthFX.set(paramName, scaledValue);
   }
 
   defineSynths {
     logger.log("Defining synths");
 
-    SynthDef(\narwhalFX, {
+    SynthDef(\narwhalKick, { arg out, amp=0.5;
+      var amp_env, phase_env, phase, freq, dur;
+
+      freq = 10.rand + 90;
+      dur = 0.25;
+
+      amp_env   = EnvGen.ar(Env.perc(1e-6,dur), doneAction:2);
+      phase_env = EnvGen.ar(Env.perc(1e-6,0.125));
+
+      phase = SinOsc.ar(20,0,pi) * phase_env;
+      Out.ar(out, SinOsc.ar([freq,1.01*freq],phase) * amp_env * amp);
+    }).add;
+
+    SynthDef(\narwhalSnare, { arg out, amp=0.5;
+      var amp_env, cut_freq, dur;
+
+      cut_freq = 3000;
+      dur = [0.0625, 0.125, 0.25].choose;
+
+      amp_env = EnvGen.ar(Env.perc(1e-6, dur), doneAction:2);
+      Out.ar(out, LPF.ar( {WhiteNoise.ar(WhiteNoise.ar)}.dup * amp_env, cut_freq ) * amp);
+    }).add;
+
+    SynthDef(\narwhalHat, { arg out, amp=0.5;
+			var amp_env, cut_freq, dur;
+
+			cut_freq = 6000;
+			dur = [0.0625, 0.125, 0.25].choose;
+
+			amp_env = EnvGen.ar(Env.perc(1e-7, dur), doneAction:2);
+			Out.ar(out, HPF.ar( {WhiteNoise.ar}.dup * amp_env, cut_freq ) * amp / 4);
+		}).add;
+
+    SynthDef(\narwhalSynthFX, {
       arg in, out=0, delay=0.25;
       var signal = In.ar(in);
 
@@ -146,6 +197,15 @@ Narwhal {
       var reverb = GVerb.ar(delayChain, 100, 1, mul: 0.3);
 
       Out.ar(out, reverb + delayChain + signal);
+    }).add;
+
+    SynthDef(\narwhalDrumFX, {
+      arg in, out=0, delay=0.25;
+      var signal = In.ar(in);
+
+      var reverb = GVerb.ar(signal, 100, 1, mul: 0.3);
+
+      Out.ar(out, reverb + signal);
     }).add;
 
     // copied from https://sccode.org/1-4Wy
@@ -174,7 +234,8 @@ Narwhal {
   setupAudio { | voiceCount |
     logger.log("Setting up audio");
 
-    fx = Synth(\narwhalFX, [\in, 2, \out, [0, 1]]);
+    synthFX = Synth(\narwhalSynthFX, [\in, 2, \out, [0, 1]]);
+    drumFX = Synth(\narwhalDrumFX, [\in, 3, \out, [0, 1]]);
 
     synths = voiceCount.collect { | c |
       Synth(\narwhalSynth, [\out, 2]);
