@@ -5,12 +5,13 @@ Narwhal {
   var synths;
   var synthFX;
   var drumFX;
+  var globalFX;
 
   var tonic;
   var defaultOctave;
   var scale;
-  var paramMap, scaleFuncs;
-  var fxParamMap, fxScaleFuncs;
+  var synthParamMap, synthScaleFuncs;
+  var synthFXParamMap, synthFXScaleFuncs;
 
   init { | s, debug = false |
     logger = NarwhalLogger.new.init(debug);
@@ -22,8 +23,7 @@ Narwhal {
 
   setup { | oscInPort, voices = 4 |
     this.setupAudio(voices);
-    this.setupParamMap();
-    this.setupFXParamMap();
+    this.setupParamMaps();
     this.setupOSC(oscInPort);
   }
 
@@ -65,7 +65,7 @@ Narwhal {
       var param = msg[1];
       var value = msg[2];
       if (param.notNil && value.notNil, {
-        this.setFXParam(param, value);
+        this.setSynthFXParam(param, value);
       }, {
         logger.error("Invalid fx message arguments");
       });
@@ -82,38 +82,31 @@ Narwhal {
 
   }
 
-  setupParamMap {
-    paramMap = Dictionary.new;
-    scaleFuncs = Dictionary.new;
+  setupParamMaps {
+    synthParamMap = Dictionary.new;
+    synthScaleFuncs = Dictionary.new;
+    synthFXParamMap = Dictionary.new;
+    synthFXScaleFuncs = Dictionary.new;
 
-    paramMap.put(0, \wave);
-    scaleFuncs.put(\wave, { arg v; v.clip(0, 1);});
+    this.addSynthParam(0, \wave, { arg v; v.clip(0, 1);});
+    this.addSynthParam(1, \cutoff, { arg v; ((v/35) * 3000) + 20;});
+    this.addSynthParam(2, \resonance, { arg v; ((v/35) * 3) + 0.1;});
+    this.addSynthParam(3, \sustain, { arg v; ((v/35) * 3) + 0.1;});
+    this.addSynthParam(4, \decay, { arg v; ((v/35) * 3) + 0.1;});
+    this.addSynthParam(5, \envelope, { arg v; (v/35) + 0.1;});
+    this.addSynthParam(6, \volume, { arg v; (v/35) * 1.1;});
 
-    paramMap.put(1, \cutoff);
-    scaleFuncs.put(\cutoff, { arg v; ((v/35) * 3000) + 20;});
-
-    paramMap.put(2, \resonance);
-    scaleFuncs.put(\resonance, { arg v; ((v/35) * 3) + 0.1;});
-
-    paramMap.put(3, \sustain);
-    scaleFuncs.put(\sustain, { arg v; ((v/35) * 3) + 0.1;});
-
-    paramMap.put(4, \decay);
-    scaleFuncs.put(\decay, { arg v; ((v/35) * 3) + 0.1;});
-
-    paramMap.put(5, \envelope);
-    scaleFuncs.put(\envelope, { arg v; (v/35) + 0.1;});
-
-    paramMap.put(6, \volume);
-    scaleFuncs.put(\volume, { arg v; (v/35) * 1.1;});
+    this.addSynthFXParam(0, \delay, { arg v; (v/35);});
   }
 
-  setupFXParamMap {
-    fxParamMap = Dictionary.new;
-    fxScaleFuncs = Dictionary.new;
+  addSynthParam { | n, name,  func |
+    synthParamMap.put(n, name);
+    synthScaleFuncs.put(name, func);
+  }
 
-    fxParamMap.put(0, \delay);
-    fxScaleFuncs.put(\delay, { arg v; (v/36);});
+  addSynthFXParam { | n, name,  func |
+    synthFXParamMap.put(n, name);
+    synthFXScaleFuncs.put(name, func);
   }
 
   playSynth { | n, note, octave |
@@ -139,16 +132,16 @@ Narwhal {
 
   setSynthParam { | n, param, value |
     this.actionSynth(n, { | synth |
-      var paramName = paramMap[param];
-      var scaledValue = scaleFuncs[paramName].value(value);
+      var paramName = synthParamMap[param];
+      var scaledValue = synthScaleFuncs[paramName].value(value);
       logger.debug("Setting synth % % to %".format(n, paramName, scaledValue));
       synth.set(paramName, scaledValue);
     });
   }
 
-  setFXParam { | param, value |
-    var paramName = fxParamMap[param];
-    var scaledValue = fxScaleFuncs[paramName].value(value);
+  setSynthFXParam { | param, value |
+    var paramName = synthFXParamMap[param];
+    var scaledValue = synthFXScaleFuncs[paramName].value(value);
     logger.debug("Setting fx % to %".format(paramName, scaledValue));
     synthFX.set(paramName, scaledValue);
   }
