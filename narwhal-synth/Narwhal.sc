@@ -122,13 +122,13 @@ Narwhal {
     });
   }
 
-	playDrum { | n |
-		switch(n,
-			0, { Synth(\narwhalKick, [\out, 3]) },
-			1, { Synth(\narwhalSnare, [\out, 3]) },
-			2, { Synth(\narwhalHat, [\out, 3]) }
-		);
-	}
+  playDrum { | n |
+    switch(n,
+      0, { Synth(\narwhalKick, [\out, [6, 7]]) },
+      1, { Synth(\narwhalSnare, [\out, [6, 7]]) },
+      2, { Synth(\narwhalHat, [\out, [6, 7]]) }
+    );
+  }
 
   setSynthParam { | n, param, value |
     this.actionSynth(n, { | synth |
@@ -173,14 +173,14 @@ Narwhal {
     }).add;
 
     SynthDef(\narwhalHat, { arg out, amp=0.5;
-			var amp_env, cut_freq, dur;
+      var amp_env, cut_freq, dur;
 
-			cut_freq = 6000;
-			dur = [0.0625, 0.125, 0.25].choose;
+      cut_freq = 6000;
+      dur = [0.0625, 0.125, 0.25].choose;
 
-			amp_env = EnvGen.ar(Env.perc(1e-7, dur), doneAction:2);
-			Out.ar(out, HPF.ar( {WhiteNoise.ar}.dup * amp_env, cut_freq ) * amp / 4);
-		}).add;
+      amp_env = EnvGen.ar(Env.perc(1e-7, dur), doneAction:2);
+      Out.ar(out, HPF.ar( {WhiteNoise.ar}.dup * amp_env, cut_freq ) * amp / 4);
+    }).add;
 
     SynthDef(\narwhalSynthFX, {
       arg in, out=0, delay=0.25;
