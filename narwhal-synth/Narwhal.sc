@@ -117,12 +117,8 @@ Narwhal {
     this.actionVoice(n, \synth, { | synth |
       var freq = scale.degreeToFreq(note, tonic.midicps, octave);
       logger.debug("Playing synth %: %hz".format(n, freq));
-      Routine {
-        synth.set(\freq, freq);
-        synth.set(\gate, 1);
-        0.01.wait;
-        synth.set(\gate, 0);
-      }.play;
+      synth.set(\freq, freq);
+      synth.set(\t_trig, 1);
     });
   }
 
@@ -211,15 +207,15 @@ Narwhal {
 
     SynthDef(\narwhalSynth, {
       arg out, freq=440, wave=0, cutoff=100, resonance=0.2,
-          sustain=0, decay=1.0, envelope=1000, gate=0, volume=0.2, distortion=0.1;
+          sustain=0, decay=1.0, envelope=1000, t_trig=0, volume=0.2, distortion=0.1;
       var filEnv, volEnv, waves, voice, shaped;
 
       volEnv = EnvGen.ar(
         Env.new([10e-10, 1, 1, 10e-10], [0.01, sustain, decay], 'exp'),
-        gate);
+        t_trig);
       filEnv = EnvGen.ar(
         Env.new([10e-10, 1, 10e-10], [0.01, decay], 'exp'),
-        gate);
+        t_trig);
       waves = [Saw.ar(freq, volEnv), Pulse.ar(freq, 0.5, volEnv)];
       voice = RLPF.ar(
         Select.ar(wave, waves),
