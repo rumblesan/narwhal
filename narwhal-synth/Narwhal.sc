@@ -18,7 +18,7 @@ Narwhal {
   init { | s, debug = false |
     logger = NarwhalLogger.new.init(debug);
     this.defineSynths(s);
-    tonic = 36;
+    tonic = 24;
     defaultOctave = 2;
     scale = Scale.minor;
   }
