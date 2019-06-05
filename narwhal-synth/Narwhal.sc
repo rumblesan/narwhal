@@ -6,32 +6,34 @@ Narwhal {
   var synthFX;
   var drumFX;
   var globalFX;
+  var synthBus;
 
   var tonic;
   var defaultOctave;
   var scale;
   var synthParamMap, synthScaleFuncs;
   var synthFXParamMap, synthFXScaleFuncs;
+  var shaperBuffer;
 
   init { | s, debug = false |
     logger = NarwhalLogger.new.init(debug);
-    this.defineSynths;
+    this.defineSynths(s);
     tonic = 36;
     defaultOctave = 2;
     scale = Scale.minor;
   }
 
-  setup { | oscInPort, voices = 4 |
-    this.setupAudio(voices);
+  setup { | s, oscInPort, voices = 4 |
+    this.setupAudio(s, voices);
     this.setupParamMaps();
     this.setupOSC(oscInPort);
   }
 
-  actionSynth{| synthNumber, action |
-    if (synths[synthNumber].notNil, {
-      action.value(synths[synthNumber]);
+  actionVoice{| voiceNumber, section, action |
+    if (synths[voiceNumber].notNil, {
+      action.value(synths[voiceNumber][section]);
     }, {
-      logger.error("No synth numbered %".format(synthNumber));
+      logger.error("No voice numbered %".format(voiceNumber));
     });
   }
 
@@ -62,10 +64,11 @@ Narwhal {
     }, '/p', NetAddr("localhost"), oscPort);
 
     OSCFunc({ | msg |
-      var param = msg[1];
-      var value = msg[2];
+      var voice = msg[1];
+      var param = msg[2];
+      var value = msg[3];
       if (param.notNil && value.notNil, {
-        this.setSynthFXParam(param, value);
+        this.setSynthFXParam(voice, param, value);
       }, {
         logger.error("Invalid fx message arguments");
       });
@@ -93,8 +96,9 @@ Narwhal {
     this.addSynthParam(2, \resonance, { arg v; ((v/35) * 3) + 0.1;});
     this.addSynthParam(3, \sustain, { arg v; ((v/35) * 3) + 0.1;});
     this.addSynthParam(4, \decay, { arg v; ((v/35) * 3) + 0.1;});
-    this.addSynthParam(5, \envelope, { arg v; (v/35) + 0.1;});
+    this.addSynthParam(5, \envelope, { arg v; (v * 60);});
     this.addSynthParam(6, \volume, { arg v; (v/35) * 1.1;});
+    this.addSynthParam(7, \distortion, { arg v; (v/35);});
 
     this.addSynthFXParam(0, \delay, { arg v; (v/35);});
   }
@@ -110,7 +114,7 @@ Narwhal {
   }
 
   playSynth { | n, note, octave |
-    this.actionSynth(n, { | synth |
+    this.actionVoice(n, \synth, { | synth |
       var freq = scale.degreeToFreq(note, tonic.midicps, octave);
       logger.debug("Playing synth %: %hz".format(n, freq));
       Routine {
@@ -130,24 +134,29 @@ Narwhal {
     );
   }
 
-  setSynthParam { | n, param, value |
-    this.actionSynth(n, { | synth |
+  setSynthParam { | voice, param, value |
+    this.actionVoice(voice, \synth, { | synth |
       var paramName = synthParamMap[param];
       var scaledValue = synthScaleFuncs[paramName].value(value);
-      logger.debug("Setting synth % % to %".format(n, paramName, scaledValue));
+      logger.debug("Setting synth % % to %".format(voice, paramName, scaledValue));
       synth.set(paramName, scaledValue);
     });
   }
 
-  setSynthFXParam { | param, value |
-    var paramName = synthFXParamMap[param];
-    var scaledValue = synthFXScaleFuncs[paramName].value(value);
-    logger.debug("Setting fx % to %".format(paramName, scaledValue));
-    synthFX.set(paramName, scaledValue);
+  setSynthFXParam { | voice, param, value |
+    this.actionVoice(voice, \fx, { | synthFX |
+      var paramName = synthFXParamMap[param];
+      var scaledValue = synthFXScaleFuncs[paramName].value(value);
+      logger.debug("Setting fx % % to %".format(voice, paramName, scaledValue));
+      synthFX.set(paramName, scaledValue);
+    });
   }
 
-  defineSynths {
+  defineSynths { | s |
     logger.log("Defining synths");
+
+    //shaperBuffer = Buffer.alloc(s, 512, 1, { |buf| buf.chebyMsg([1,0,1,1,0,1])});
+    shaperBuffer = Buffer.alloc(s, 512, 1, {arg buf; buf.chebyMsg([0.25,0.5,0.25], false)});
 
     SynthDef(\narwhalKick, { arg out, amp=0.5;
       var amp_env, phase_env, phase, freq, dur;
@@ -183,29 +192,27 @@ Narwhal {
     }).add;
 
     SynthDef(\narwhalSynthFX, {
-      arg in, out=0, delay=0.25;
-      var signal = In.ar(in);
+      arg in, out, delay=0.25;
+      var mix=0.33, room=0.5, damp=0.5;
+      var signal = In.ar(in, 2);
 
       var delayChain = DelayN.ar(signal, 2, delay, 1, mul: 0.3);
-      var reverb = GVerb.ar(delayChain, 100, 1, mul: 0.3);
+      var reverb = FreeVerb2.ar(delayChain[0], delayChain[1], mix, room, damp);
 
       Out.ar(out, reverb + delayChain + signal);
     }).add;
 
-    SynthDef(\narwhalDrumFX, {
-      arg in, out=0, delay=0.25;
-      var signal = In.ar(in);
-
-      var reverb = GVerb.ar(signal, 100, 1, mul: 0.3);
-
-      Out.ar(out, reverb + signal);
+    SynthDef(\narwhalGlobalFX, {
+      arg in, out, mix=0.33, room=0.5, damp=0.5;
+      var signal = In.ar(in, 2);
+      var reverb = FreeVerb2.ar(signal[0], signal[1], mix, room, damp);
+      Out.ar(out, reverb);
     }).add;
 
-    // copied from https://sccode.org/1-4Wy
     SynthDef(\narwhalSynth, {
-      arg out=0, freq=440, wave=0, cutoff=100, resonance=0.2,
-          sustain=0, decay=1.0, envelope=1000, gate=0, volume=0.2;
-      var filEnv, volEnv, waves;
+      arg out, freq=440, wave=0, cutoff=100, resonance=0.2,
+          sustain=0, decay=1.0, envelope=1000, gate=0, volume=0.2, distortion=0.1;
+      var filEnv, volEnv, waves, voice, shaped;
 
       volEnv = EnvGen.ar(
         Env.new([10e-10, 1, 1, 10e-10], [0.01, sustain, decay], 'exp'),
@@ -214,24 +221,34 @@ Narwhal {
         Env.new([10e-10, 1, 10e-10], [0.01, decay], 'exp'),
         gate);
       waves = [Saw.ar(freq, volEnv), Pulse.ar(freq, 0.5, volEnv)];
-
-      Out.ar(out, RLPF.ar(
+      voice = RLPF.ar(
         Select.ar(wave, waves),
         cutoff + (filEnv * envelope),
         resonance
-      ).dup * volume);
+      ).dup;
+      shaped = Shaper.ar(shaperBuffer, voice, 0.5);
+
+      Out.ar(out, ((shaped * distortion) + (voice * (1 - distortion))) * volume);
     }).add;
 
   }
 
-  setupAudio { | voiceCount |
+  setupAudio { | s, voiceCount |
     logger.log("Setting up audio");
 
-    synthFX = Synth(\narwhalSynthFX, [\in, 2, \out, [0, 1]]);
-    drumFX = Synth(\narwhalDrumFX, [\in, 3, \out, [0, 1]]);
+    synthBus = Bus.audio(s, 2);
+    globalFX = Synth(\narwhalGlobalFX, [\in, synthBus, \out, 0]);
 
     synths = voiceCount.collect { | c |
-      Synth(\narwhalSynth, [\out, 2]);
+      var voice, synth, fx, voiceBus;
+      voiceBus = Bus.audio(s, 2);
+      fx = Synth(\narwhalSynthFX, [\in, voiceBus, \out, synthBus]);
+      synth = Synth(\narwhalSynth, [\out, voiceBus]);
+      voice = Dictionary.new;
+      voice.put(\synth, synth);
+      voice.put(\bus, voiceBus);
+      voice.put(\fx, fx);
+      voice
     };
   }
 

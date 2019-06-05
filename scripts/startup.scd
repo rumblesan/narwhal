@@ -7,7 +7,7 @@
 	s.waitForBoot {
     ~narwhal = Narwhal.new.init(debug: true);
     s.sync;
-    ~narwhal.setup(49162, 4)
+    ~narwhal.setup(s, 49162, 4)
 	}
 
 )
