@@ -110,6 +110,7 @@ Narwhal {
     this.addSynthParam(5, \envelope, { arg v; (v * 60);});
     this.addSynthParam(6, \volume, { arg v; (v/35) * 1.1;});
     this.addSynthParam(7, \distortion, { arg v; (v/35);});
+    this.addSynthParam(8, \gain, { arg v; (v/5) + 0.9;});
 
     this.addSynthFXParam(0, \delayTime, { arg v; (v/35);});
     this.addSynthFXParam(1, \delayFeedback, { arg v; (v/35);});
@@ -227,8 +228,8 @@ Narwhal {
 
     SynthDef(\narwhalSynth, {
       arg out, freq=440, wave=0, cutoff=100, resonance=0.2,
-          sustain=0, decay=1.0, envelope=1000, t_trig=0, volume=0.2, distortion=0.1;
-      var filEnv, volEnv, waves, voice, shaped;
+          sustain=0, decay=1.0, envelope=1000, t_trig=0, volume=0.2, gain=1.3, distortion=0.1;
+      var filEnv, volEnv, waves, voice, shaped, distorted, compressed;
 
       volEnv = EnvGen.ar(
         Env.new([10e-10, 1, 1, 10e-10], [0.01, sustain, decay], 'exp'),
@@ -243,8 +244,11 @@ Narwhal {
         resonance
       ).dup;
       shaped = Shaper.ar(shaperBuffer, voice, 0.5);
+      distorted = (((shaped * distortion) + (voice * (1 - distortion))) * gain).distort;
 
-      Out.ar(out, ((shaped * distortion) + (voice * (1 - distortion))) * volume);
+      compressed = Compander.ar(distorted, distorted, 0.3);
+
+      Out.ar(out, compressed * volume);
     }).add;
 
     SynthDef(\narwhalSynthFX, {
