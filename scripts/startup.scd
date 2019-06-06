@@ -7,7 +7,8 @@
 	s.waitForBoot {
     ~narwhal = Narwhal.new.init(debug: true);
     s.sync;
-    ~narwhal.setup(s, 49162, 4)
+    ~narwhal.setup(s, 4);
+    ~narwhal.setupOrcaOSC(49162);
 	}
 
 )

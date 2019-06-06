@@ -23,10 +23,9 @@ Narwhal {
     scale = Scale.minor;
   }
 
-  setup { | s, oscInPort, voices = 4 |
+  setup { | s, voices = 4 |
     this.setupAudio(s, voices);
     this.setupParamMaps();
-    this.setupOSC(oscInPort);
   }
 
   actionVoice{| voiceNumber, section, action |
@@ -45,8 +44,8 @@ Narwhal {
     });
   }
 
-  setupOSC { | oscPort |
-    logger.log("Setting up OSC listeners");
+  setupOrcaOSC { | oscPort |
+    logger.log("Setting up OSC listeners for Orca");
 
     OSCFunc({ | msg |
       var voice = msg[1];
