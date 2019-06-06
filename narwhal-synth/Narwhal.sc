@@ -3,6 +3,7 @@ Narwhal {
 
   var logger;
   var synths;
+  var drumSynths;
   var globalFX;
   var globalBus;
 
@@ -33,6 +34,14 @@ Narwhal {
       action.value(synths[voiceNumber][section]);
     }, {
       logger.error("No voice numbered %".format(voiceNumber));
+    });
+  }
+
+  actionDrum{| voiceNumber, action |
+    if (drumSynths[voiceNumber].notNil, {
+      action.value(drumSynths[voiceNumber]);
+    }, {
+      logger.error("No drum numbered %".format(voiceNumber));
     });
   }
 
@@ -148,11 +157,9 @@ Narwhal {
   }
 
   playDrum { | n |
-    switch(n,
-      0, { Synth(\narwhalKick, [\out, globalBus]) },
-      1, { Synth(\narwhalSnare, [\out, globalBus]) },
-      2, { Synth(\narwhalHat, [\out, globalBus]) }
-    );
+    this.actionDrum(n, {|drumSynth|
+      drumSynth.set(\t_trig, 1);
+    });
   }
 
   setSynthParam { | voice, param, value |
@@ -186,36 +193,36 @@ Narwhal {
     //shaperBuffer = Buffer.alloc(s, 512, 1, { |buf| buf.chebyMsg([1,0,1,1,0,1])});
     shaperBuffer = Buffer.alloc(s, 512, 1, {arg buf; buf.chebyMsg([0.25,0.5,0.25], false)});
 
-    SynthDef(\narwhalKick, { arg out, amp=0.5;
+    SynthDef(\narwhalKick, { arg out, t_trig=0, amp=0.5;
       var amp_env, phase_env, phase, freq, dur;
 
       freq = 10.rand + 90;
       dur = 0.25;
 
-      amp_env   = EnvGen.ar(Env.perc(1e-6,dur), doneAction:2);
-      phase_env = EnvGen.ar(Env.perc(1e-6,0.125));
+      amp_env   = EnvGen.ar(Env.perc(1e-6,dur), t_trig);
+      phase_env = EnvGen.ar(Env.perc(1e-6,0.125), t_trig);
 
       phase = SinOsc.ar(20,0,pi) * phase_env;
       Out.ar(out, SinOsc.ar([freq,1.01*freq],phase) * amp_env * amp);
     }).add;
 
-    SynthDef(\narwhalSnare, { arg out, amp=0.5;
+    SynthDef(\narwhalSnare, { arg out, t_trig=0, amp=0.5;
       var amp_env, cut_freq, dur;
 
       cut_freq = 3000;
       dur = [0.0625, 0.125, 0.25].choose;
 
-      amp_env = EnvGen.ar(Env.perc(1e-6, dur), doneAction:2);
+      amp_env = EnvGen.ar(Env.perc(1e-6, dur), t_trig);
       Out.ar(out, LPF.ar( {WhiteNoise.ar(WhiteNoise.ar)}.dup * amp_env, cut_freq ) * amp);
     }).add;
 
-    SynthDef(\narwhalHat, { arg out, amp=0.5;
+    SynthDef(\narwhalHat, { arg out, t_trig=0, amp=0.5;
       var amp_env, cut_freq, dur;
 
       cut_freq = 6000;
       dur = [0.0625, 0.125, 0.25].choose;
 
-      amp_env = EnvGen.ar(Env.perc(1e-7, dur), doneAction:2);
+      amp_env = EnvGen.ar(Env.perc(1e-7, dur), t_trig);
       Out.ar(out, HPF.ar( {WhiteNoise.ar}.dup * amp_env, cut_freq ) * amp / 4);
     }).add;
 
@@ -272,6 +279,11 @@ Narwhal {
 
     globalBus = Bus.audio(s, 2);
     globalFX = Synth(\narwhalGlobalFX, [\in, globalBus, \out, 0]);
+
+    drumSynths = Dictionary.new;
+    drumSynths.put(0, Synth(\narwhalKick, [\out, globalBus]));
+    drumSynths.put(1, Synth(\narwhalSnare, [\out, globalBus]));
+    drumSynths.put(2, Synth(\narwhalHat, [\out, globalBus]));
 
     synths = voiceCount.collect { | c |
       var voice, synth, fx, voiceBus;
