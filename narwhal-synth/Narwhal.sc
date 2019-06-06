@@ -297,7 +297,7 @@ Narwhal {
     SynthDef(\narwhalSynth, {
       arg out, freq=440, wave=0, cutoff=100, resonance=0.2,
           sustain=0, decay=1.0, envelope=1000, t_trig=0, volume=0.2, gain=1.3, distortion=0.1;
-      var filEnv, volEnv, waves, voice, shaped, distorted, compressed, haasDelay, haasChannel, haased;
+      var filEnv, volEnv, waves, voice, shaped, distorted, compressed;
 
       volEnv = EnvGen.ar(
         Env.new([10e-10, 1, 1, 10e-10], [0.01, sustain, decay], 'exp'),
@@ -316,24 +316,24 @@ Narwhal {
 
       compressed = Compander.ar(distorted, distorted, 0.3) * volume;
 
-      haasChannel = [\left, \right].choose;
-      haasDelay = (5 + 15.rand)/1000;
-
-      haased = if (haasDelay == \left, {
-        [DelayN.ar(compressed, 0.1, haasDelay), compressed];
-      }, {
-        [compressed, DelayN.ar(compressed, 0.1, haasDelay)];
-      });
-
-      Out.ar(out, haased);
+      Out.ar(out, compressed);
     }).add;
 
     SynthDef(\narwhalSynthFX, {
       arg in, out, delayTime=0.25, delayFeedback=0.2, reverbMix=0, reverbRoom=0.5, reverbDamping=0.5;
-      var inputSignal, delayed, reverbed;
+      var inputSignal, haasDelay, haasChannel, haased, delayed, reverbed;
       inputSignal = In.ar(in, 2);
 
-      delayed = inputSignal + (LocalIn.ar(2) * delayFeedback);
+      haasChannel = [\left, \right].choose;
+      haasDelay = (5 + 15.rand)/1000;
+
+      haased = if (haasDelay == \left, {
+        [DelayN.ar(inputSignal[0], 0.1, haasDelay), inputSignal[1]];
+      }, {
+        [inputSignal[0], DelayN.ar(inputSignal[1], 0.1, haasDelay)];
+      });
+
+      delayed = haased + (LocalIn.ar(2) * delayFeedback);
 
       reverbed = FreeVerb2.ar(delayed[0], delayed[1], reverbMix, reverbRoom, reverbDamping);
 
