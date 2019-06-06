@@ -102,25 +102,25 @@ Narwhal {
     globalFXParamMap = Dictionary.new;
     globalFXScaleFuncs = Dictionary.new;
 
-    this.addSynthParam(0, \wave, { arg v; v.clip(0, 1);});
-    this.addSynthParam(1, \cutoff, { arg v; ((v/35) * 3000) + 20;});
-    this.addSynthParam(2, \resonance, { arg v; ((v/35) * 3) + 0.1;});
-    this.addSynthParam(3, \sustain, { arg v; ((v/35) * 3) + 0.1;});
-    this.addSynthParam(4, \decay, { arg v; ((v/35) * 3) + 0.1;});
-    this.addSynthParam(5, \envelope, { arg v; (v * 60);});
-    this.addSynthParam(6, \volume, { arg v; (v/35) * 1.1;});
-    this.addSynthParam(7, \distortion, { arg v; (v/35);});
-    this.addSynthParam(8, \gain, { arg v; (v/5) + 0.9;});
+    this.addSynthParam(0, \wave, {|v| v.clip(0, 1);});
+    this.addSynthParam(1, \cutoff, {|v| ((v/35) * 3000) + 20;});
+    this.addSynthParam(2, \resonance, {|v| ((v/35) * 3) + 0.1;});
+    this.addSynthParam(3, \sustain, {|v| ((v/35) * 3) + 0.1;});
+    this.addSynthParam(4, \decay, {|v| ((v/35) * 3) + 0.1;});
+    this.addSynthParam(5, \envelope, {|v| (v * 60);});
+    this.addSynthParam(6, \volume, {|v| (v/35) * 1.1;});
+    this.addSynthParam(7, \distortion, {|v| (v/35);});
+    this.addSynthParam(8, \gain, {|v| (v/5) + 0.9;});
 
-    this.addSynthFXParam(0, \delayTime, { arg v; (v/35);});
-    this.addSynthFXParam(1, \delayFeedback, { arg v; (v/35);});
-    this.addSynthFXParam(2, \reverbMix, { arg v; (v/35);});
-    this.addSynthFXParam(3, \reverbRoom, { arg v; (v/35);});
-    this.addSynthFXParam(4, \reverbDamping, { arg v; (v/35);});
+    this.addSynthFXParam(0, \delayTime, {|v| (v/35);});
+    this.addSynthFXParam(1, \delayFeedback, {|v| (v/35);});
+    this.addSynthFXParam(2, \reverbMix, {|v| (v/35);});
+    this.addSynthFXParam(3, \reverbRoom, {|v| (v/35);});
+    this.addSynthFXParam(4, \reverbDamping, {|v| (v/35);});
 
-    this.addGlobalFXParam(0, \reverbMix, { arg v; (v/35);});
-    this.addGlobalFXParam(1, \reverbRoom, { arg v; (v/35);});
-    this.addGlobalFXParam(2, \reverbDamping, { arg v; (v/35);});
+    this.addGlobalFXParam(0, \reverbMix, {|v| (v/35);});
+    this.addGlobalFXParam(1, \reverbRoom, {|v| (v/35);});
+    this.addGlobalFXParam(2, \reverbDamping, {|v| (v/35);});
   }
 
   addSynthParam { | n, name,  func |
