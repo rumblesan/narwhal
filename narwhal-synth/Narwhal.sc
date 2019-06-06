@@ -14,6 +14,8 @@ Narwhal {
 
   var synth303ParamMap, synth303ScaleFuncs,
       synth303FXParamMap, synth303FXScaleFuncs,
+      drum808ParamMap, drum808SoundParamMap, drum808ScaleFuncs,
+      drum808FXParamMap, drum808FXScaleFuncs,
       globalFXParamMap, globalFXScaleFuncs;
   var shaperBuffer;
 
@@ -152,13 +154,20 @@ Narwhal {
   }
 
   set808Param { |args|
-    var param = args[0];
-    var value = args[1];
-    if (param.isNil || value.isNil, {
+    var paramNum, value, paramName, sound;
+    paramNum = args[0];
+    value = args[1];
+    if (paramNum.isNil || value.isNil, {
       logger.error("Invalid 808 parameter message arguments");
       ^nil;
     });
-    logger.debug("Setting 808 param");
+    paramName = drum808ParamMap[paramNum];
+    sound = drum808SoundParamMap[paramNum];
+    this.action808Drum(sound, {|drumSynth|
+      var scaledValue = drum808ScaleFuncs[paramNum].value(value);
+      logger.debug("Setting 808 % % to % -> %".format(sound, paramName, value, scaledValue));
+      drumSynth.set(paramName, scaledValue)
+    });
   }
 
   set808FXParam { |args|
@@ -176,6 +185,11 @@ Narwhal {
     synth303ScaleFuncs = Dictionary.new;
     synth303FXParamMap = Dictionary.new;
     synth303FXScaleFuncs = Dictionary.new;
+    drum808ParamMap = Dictionary.new;
+    drum808SoundParamMap = Dictionary.new;
+    drum808ScaleFuncs = Dictionary.new;
+    drum808FXParamMap = Dictionary.new;
+    drum808FXScaleFuncs = Dictionary.new;
     globalFXParamMap = Dictionary.new;
     globalFXScaleFuncs = Dictionary.new;
 
@@ -198,19 +212,32 @@ Narwhal {
     this.addGlobalFXParam(0, \reverbMix, {|v| (v/35);});
     this.addGlobalFXParam(1, \reverbRoom, {|v| (v/35);});
     this.addGlobalFXParam(2, \reverbDamping, {|v| (v/35);});
+
+    this.add808Param(0, \kick, \decay, {|v| (v/35);});
   }
 
-  addSynthParam { | n, name,  func |
+  addSynthParam { | n, name, func |
     synth303ParamMap.put(n, name);
     synth303ScaleFuncs.put(name, func);
   }
 
-  addSynthFXParam { | n, name,  func |
+  addSynthFXParam { | n, name, func |
     synth303FXParamMap.put(n, name);
     synth303FXScaleFuncs.put(name, func);
   }
 
-  addGlobalFXParam { | n, name,  func |
+  add808Param { | n, sound, name, func |
+    drum808ParamMap.put(n, name);
+    drum808SoundParamMap.put(n, sound);
+    drum808ScaleFuncs.put(n, func);
+  }
+
+  add808FXParam { | n, name, func |
+    drum808FXParamMap.put(n, name);
+    drum808FXScaleFuncs.put(name, func);
+  }
+
+  addGlobalFXParam { | n, name, func |
     globalFXParamMap.put(n, name);
     globalFXScaleFuncs.put(name, func);
   }
@@ -228,13 +255,12 @@ Narwhal {
     //shaperBuffer = Buffer.alloc(s, 512, 1, { |buf| buf.chebyMsg([1,0,1,1,0,1])});
     shaperBuffer = Buffer.alloc(s, 512, 1, {arg buf; buf.chebyMsg([0.25,0.5,0.25], false)});
 
-    SynthDef(\narwhalKick, { arg out, t_trig=0, amp=0.5;
-      var amp_env, phase_env, phase, freq, dur;
+    SynthDef(\narwhalKick, { arg out, t_trig=0, amp=0.5, decay=0.25;
+      var amp_env, phase_env, phase, freq;
 
       freq = 10.rand + 90;
-      dur = 0.25;
 
-      amp_env   = EnvGen.ar(Env.perc(1e-6,dur), t_trig);
+      amp_env   = EnvGen.ar(Env.perc(1e-6,decay), t_trig);
       phase_env = EnvGen.ar(Env.perc(1e-6,0.125), t_trig);
 
       phase = SinOsc.ar(20,0,pi) * phase_env;
