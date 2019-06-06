@@ -2,16 +2,18 @@
 Narwhal {
 
   var logger;
-  var synths;
-  var drumSynths;
-  var globalFX;
-  var globalBus;
 
   var tonic;
   var defaultOctave;
   var scale;
-  var synthParamMap, synthScaleFuncs,
-      synthFXParamMap, synthFXScaleFuncs,
+
+  var synth303Voices;
+  var drum808Sounds;
+  var globalFX;
+  var globalBus;
+
+  var synth303ParamMap, synth303ScaleFuncs,
+      synth303FXParamMap, synth303FXScaleFuncs,
       globalFXParamMap, globalFXScaleFuncs;
   var shaperBuffer;
 
@@ -28,19 +30,19 @@ Narwhal {
     this.setupParamMaps();
   }
 
-  actionVoice{| voiceNumber, section, action |
-    if (synths[voiceNumber].notNil, {
-      action.value(synths[voiceNumber][section]);
+  action303Voice{| voiceNumber, section, action |
+    if (synth303Voices[voiceNumber].notNil, {
+      action.value(synth303Voices[voiceNumber][section]);
     }, {
       logger.error("No voice numbered %".format(voiceNumber));
     });
   }
 
-  actionDrum{| voiceNumber, action |
-    if (drumSynths[voiceNumber].notNil, {
-      action.value(drumSynths[voiceNumber]);
+  action808Drum{| instrument, action |
+    if (drum808Sounds[instrument].notNil, {
+      action.value(drum808Sounds[instrument]);
     }, {
-      logger.error("No drum numbered %".format(voiceNumber));
+      logger.error("No 808 sound named %".format(instrument));
     });
   }
 
@@ -48,37 +50,33 @@ Narwhal {
     logger.log("Setting up OSC listeners for Orca");
 
     OSCFunc({ | msg |
-      var voice = msg[1];
-      var note = msg[2];
-      var octave = msg[3];
-      if (voice.notNil && note.notNil, {
-        if (octave.isNil, { octave = defaultOctave });
-        this.playSynth(voice, note, octave);
-      }, {
-        logger.error("Invalid note message arguments: % - %".format(voice, note));
-      })
-    }, '/n', NetAddr("localhost"), oscPort);
+      var instrument = "%%%".format(msg[1], msg[2], msg[3]);
+      var args = msg[4..];
+      switch(instrument,
+        "303", { this.trigger303(args); },
+        "808", { this.trigger808(args); },
+        { logger.error("% is not a valid instrument".format(instrument)); }
+      );
+    }, '/t', NetAddr("localhost"), oscPort);
 
     OSCFunc({ | msg |
-      var voice = msg[1];
-      var param = msg[2];
-      var value = msg[3];
-      if (param.notNil && value.notNil, {
-        this.setSynthParam(voice, param, value);
-      }, {
-        logger.error("Invalid parameter message arguments");
-      });
+      var instrument = "%%%".format(msg[1], msg[2], msg[3]);
+      var args = msg[4..];
+      switch(instrument,
+        "303", { this.set303Param(args); },
+        "808", { this.set808Param(args); },
+        { logger.error("% is not a valid instrument".format(instrument)); }
+      );
     }, '/p', NetAddr("localhost"), oscPort);
 
     OSCFunc({ | msg |
-      var voice = msg[1];
-      var param = msg[2];
-      var value = msg[3];
-      if (param.notNil && value.notNil, {
-        this.setSynthFXParam(voice, param, value);
-      }, {
-        logger.error("Invalid fx message arguments");
-      });
+      var instrument = "%%%".format(msg[1], msg[2], msg[3]);
+      var args = msg[4..];
+      switch(instrument,
+        "303", { this.set303FXParam(args); },
+        "808", { this.set808FXParam(args); },
+        { logger.error("% is not a valid instrument".format(instrument)); }
+      );
     }, '/f', NetAddr("localhost"), oscPort);
 
     OSCFunc({ | msg |
@@ -91,22 +89,93 @@ Narwhal {
       });
     }, '/g', NetAddr("localhost"), oscPort);
 
-    OSCFunc({ | msg |
-      var instrument = msg[1];
-      if (instrument.notNil, {
-        this.playDrum(instrument);
-      }, {
-        logger.error("Invalid fx drum instrument");
-      });
-    }, '/d', NetAddr("localhost"), oscPort);
+  }
 
+  trigger303 { |args|
+    var voiceNum = args[0];
+    var note = args[1];
+    var octave = defaultOctave;
+    if (note.isNil, { ^nil; });
+    if (args[2].notNil, { octave = args[2] });
+    this.action303Voice(voiceNum, \synth, { | synth |
+      var freq = scale.degreeToFreq(note, tonic.midicps, octave);
+      logger.debug("Triggering 303 %: %hz".format(voiceNum, freq));
+      synth.set(\freq, freq);
+      synth.set(\t_trig, 1);
+    });
+  }
+
+  set303Param { |args|
+    var voice = args[0];
+    var param = args[1];
+    var value = args[2];
+    if (param.isNil || value.isNil, {
+      logger.error("Invalid parameter message arguments");
+      ^nil;
+    });
+    this.action303Voice(voice, \synth, { | synth |
+      var paramName = synth303ParamMap[param];
+      var scaledValue = synth303ScaleFuncs[paramName].value(value);
+      logger.debug("Setting synth % % to % -> %".format(voice, paramName, value, scaledValue));
+      synth.set(paramName, scaledValue);
+    });
+  }
+
+  set303FXParam { |args|
+    var voice = args[0];
+    var param = args[1];
+    var value = args[2];
+    if (param.isNil || value.isNil, {
+      logger.error("Invalid fx parameter message arguments");
+      ^nil;
+    });
+    this.action303Voice(voice, \fx, { | synthFX |
+      var paramName = synth303FXParamMap[param];
+      var scaledValue = synth303FXScaleFuncs[paramName].value(value);
+      logger.debug("Setting synth % fx % to % -> %".format(voice, paramName, value, scaledValue));
+      synthFX.set(paramName, scaledValue);
+    });
+  }
+
+  trigger808 { |args|
+    var sound = switch(args[0],
+      0, { \kick },
+      1, { \snare },
+      2, { \hat },
+    );
+    if (sound.notNil, {
+      logger.debug("Triggering 808 -> %".format(sound));
+      this.action808Drum(sound, {|drumSynth|
+        drumSynth.set(\t_trig, 1);
+      });
+    });
+  }
+
+  set808Param { |args|
+    var param = args[0];
+    var value = args[1];
+    if (param.isNil || value.isNil, {
+      logger.error("Invalid 808 parameter message arguments");
+      ^nil;
+    });
+    logger.debug("Setting 808 param");
+  }
+
+  set808FXParam { |args|
+    var param = args[0];
+    var value = args[1];
+    if (param.isNil || value.isNil, {
+      logger.error("Invalid 808 FX parameter message arguments");
+      ^nil;
+    });
+    logger.debug("Setting 808 FX param");
   }
 
   setupParamMaps {
-    synthParamMap = Dictionary.new;
-    synthScaleFuncs = Dictionary.new;
-    synthFXParamMap = Dictionary.new;
-    synthFXScaleFuncs = Dictionary.new;
+    synth303ParamMap = Dictionary.new;
+    synth303ScaleFuncs = Dictionary.new;
+    synth303FXParamMap = Dictionary.new;
+    synth303FXScaleFuncs = Dictionary.new;
     globalFXParamMap = Dictionary.new;
     globalFXScaleFuncs = Dictionary.new;
 
@@ -132,51 +201,18 @@ Narwhal {
   }
 
   addSynthParam { | n, name,  func |
-    synthParamMap.put(n, name);
-    synthScaleFuncs.put(name, func);
+    synth303ParamMap.put(n, name);
+    synth303ScaleFuncs.put(name, func);
   }
 
   addSynthFXParam { | n, name,  func |
-    synthFXParamMap.put(n, name);
-    synthFXScaleFuncs.put(name, func);
+    synth303FXParamMap.put(n, name);
+    synth303FXScaleFuncs.put(name, func);
   }
 
   addGlobalFXParam { | n, name,  func |
     globalFXParamMap.put(n, name);
     globalFXScaleFuncs.put(name, func);
-  }
-
-  playSynth { | n, note, octave |
-    this.actionVoice(n, \synth, { | synth |
-      var freq = scale.degreeToFreq(note, tonic.midicps, octave);
-      logger.debug("Playing synth %: %hz".format(n, freq));
-      synth.set(\freq, freq);
-      synth.set(\t_trig, 1);
-    });
-  }
-
-  playDrum { | n |
-    this.actionDrum(n, {|drumSynth|
-      drumSynth.set(\t_trig, 1);
-    });
-  }
-
-  setSynthParam { | voice, param, value |
-    this.actionVoice(voice, \synth, { | synth |
-      var paramName = synthParamMap[param];
-      var scaledValue = synthScaleFuncs[paramName].value(value);
-      logger.debug("Setting synth % % to % -> %".format(voice, paramName, value, scaledValue));
-      synth.set(paramName, scaledValue);
-    });
-  }
-
-  setSynthFXParam { | voice, param, value |
-    this.actionVoice(voice, \fx, { | synthFX |
-      var paramName = synthFXParamMap[param];
-      var scaledValue = synthFXScaleFuncs[paramName].value(value);
-      logger.debug("Setting synth % fx % to % -> %".format(voice, paramName, value, scaledValue));
-      synthFX.set(paramName, scaledValue);
-    });
   }
 
   setGlobalFXParam { | param, value |
@@ -279,12 +315,12 @@ Narwhal {
     globalBus = Bus.audio(s, 2);
     globalFX = Synth(\narwhalGlobalFX, [\in, globalBus, \out, 0]);
 
-    drumSynths = Dictionary.new;
-    drumSynths.put(0, Synth(\narwhalKick, [\out, globalBus]));
-    drumSynths.put(1, Synth(\narwhalSnare, [\out, globalBus]));
-    drumSynths.put(2, Synth(\narwhalHat, [\out, globalBus]));
+    drum808Sounds = Dictionary.new;
+    drum808Sounds.put(\kick, Synth(\narwhalKick, [\out, globalBus]));
+    drum808Sounds.put(\snare, Synth(\narwhalSnare, [\out, globalBus]));
+    drum808Sounds.put(\hat, Synth(\narwhalHat, [\out, globalBus]));
 
-    synths = voiceCount.collect { | c |
+    synth303Voices = voiceCount.collect { | c |
       var voice, synth, fx, voiceBus;
       voiceBus = Bus.audio(s, 2);
       fx = Synth(\narwhalSynthFX, [\in, voiceBus, \out, globalBus]);
