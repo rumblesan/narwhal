@@ -200,14 +200,14 @@ Narwhal {
     this.addSynthParam(4, \decay, {|v| ((v/35) * 3) + 0.1;});
     this.addSynthParam(5, \envelope, {|v| (v * 60);});
     this.addSynthParam(6, \volume, {|v| (v/35) * 1.1;});
-    this.addSynthParam(7, \distortion, {|v| (v/35);});
-    this.addSynthParam(8, \gain, {|v| (v/5) + 0.9;});
 
     this.addSynthFXParam(0, \delayTime, {|v| (v/35);});
     this.addSynthFXParam(1, \delayFeedback, {|v| (v/35);});
     this.addSynthFXParam(2, \reverbMix, {|v| (v/35);});
     this.addSynthFXParam(3, \reverbRoom, {|v| (v/35);});
     this.addSynthFXParam(4, \reverbDamping, {|v| (v/35);});
+    this.addSynthFXParam(5, \distortion, {|v| (v/35);});
+    this.addSynthFXParam(6, \gain, {|v| (v/5) + 0.9;});
 
     this.addGlobalFXParam(0, \reverbMix, {|v| (v/35);});
     this.addGlobalFXParam(1, \reverbRoom, {|v| (v/35);});
@@ -291,13 +291,14 @@ Narwhal {
       arg in, out, reverbMix=0.33, reverbRoom=0.5, reverbDamping=0.5;
       var inputSignal = In.ar(in, 2);
       var reverbed = FreeVerb2.ar(inputSignal[0], inputSignal[1], reverbMix, reverbRoom, reverbDamping);
-      Out.ar(out, reverbed);
+      var compressed = Compander.ar(reverbed, reverbed, 0.9, 1, 0.3, 0.002, 0.1) * 1.1;
+      Out.ar(out, compressed.softclip);
     }).add;
 
     SynthDef(\narwhalSynth, {
       arg out, freq=440, wave=0, cutoff=100, resonance=0.2,
-          sustain=0, decay=1.0, envelope=1000, t_trig=0, volume=0.2, gain=1.3, distortion=0.1;
-      var filEnv, volEnv, waves, voice, shaped, distorted, compressed;
+          sustain=0, decay=1.0, envelope=1000, t_trig=0, volume=0.2;
+      var filEnv, volEnv, waves, voice;
 
       volEnv = EnvGen.ar(
         Env.new([10e-10, 1, 1, 10e-10], [0.01, sustain, decay], 'exp'),
@@ -311,26 +312,27 @@ Narwhal {
         cutoff + (filEnv * envelope),
         resonance
       ).dup;
-      shaped = Shaper.ar(shaperBuffer, voice, 0.5);
-      distorted = (((shaped * distortion) + (voice * (1 - distortion))) * gain).distort;
 
-      compressed = Compander.ar(distorted, distorted, 0.3) * volume;
-
-      Out.ar(out, compressed);
+      Out.ar(out, voice * volume);
     }).add;
 
     SynthDef(\narwhalSynthFX, {
-      arg in, out, delayTime=0.25, delayFeedback=0.2, reverbMix=0, reverbRoom=0.5, reverbDamping=0.5;
-      var inputSignal, haasDelay, haasChannel, haased, delayed, reverbed;
+      arg in, out, delayTime=0.25, delayFeedback=0.2, reverbMix=0, reverbRoom=0.5, reverbDamping=0.5, gain=1.3, distortion=0.1;
+      var inputSignal, shaped, distorted, compressed, haasDelay, haasChannel, haased, delayed, reverbed;
       inputSignal = In.ar(in, 2);
+
+      shaped = Shaper.ar(shaperBuffer, inputSignal, 0.5);
+      distorted = ((((shaped * distortion) + (inputSignal * (1 - distortion))) * gain).distort) * 2;
+
+      compressed = Compander.ar(distorted, distorted, 0.3);
 
       haasChannel = [\left, \right].choose;
       haasDelay = (5 + 15.rand)/1000;
 
       haased = if (haasDelay == \left, {
-        [DelayN.ar(inputSignal[0], 0.1, haasDelay), inputSignal[1]];
+        [DelayN.ar(compressed[0], 0.1, haasDelay), compressed[1]];
       }, {
-        [inputSignal[0], DelayN.ar(inputSignal[1], 0.1, haasDelay)];
+        [compressed[0], DelayN.ar(compressed[1], 0.1, haasDelay)];
       });
 
       delayed = haased + (LocalIn.ar(2) * delayFeedback);
