@@ -195,7 +195,7 @@ Narwhal {
 
     this.addSynthParam(0, \wave, {|v| v.clip(0, 1);});
     this.addSynthParam(1, \cutoff, {|v| ((v/35) * 3000) + 20;});
-    this.addSynthParam(2, \resonance, {|v| ((v/35) * 3) + 0.1;});
+    this.addSynthParam(2, \resonance, {|v| (7 / (v + 2).squared);});
     this.addSynthParam(3, \sustain, {|v| ((v/35) * 3) + 0.1;});
     this.addSynthParam(4, \decay, {|v| ((v/35) * 3) + 0.1;});
     this.addSynthParam(5, \envelope, {|v| (v * 60);});
