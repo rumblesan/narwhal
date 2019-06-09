@@ -200,6 +200,7 @@ Narwhal {
     this.addSynthParam(4, \decay, {|v| ((v/35) * 3) + 0.1;});
     this.addSynthParam(5, \envelope, {|v| (v * 60);});
     this.addSynthParam(6, \volume, {|v| (v/35) * 1.1;});
+    this.addSynthParam(7, \glide, {|v| ((v + 0.1)/30).squared;});
 
     this.addSynthFXParam(0, \delayTime, {|v| (v/35);});
     this.addSynthFXParam(1, \delayFeedback, {|v| (v/35);});
@@ -297,7 +298,7 @@ Narwhal {
 
     SynthDef(\narwhalSynth, {
       arg out, freq=440, wave=0, cutoff=100, resonance=0.2,
-          sustain=0, decay=1.0, envelope=1000, t_trig=0, volume=0.2;
+          sustain=0, decay=1.0, glide=0.01, envelope=1000, t_trig=0, volume=0.2;
       var filEnv, volEnv, waves, voice;
 
       volEnv = EnvGen.ar(
@@ -306,7 +307,7 @@ Narwhal {
       filEnv = EnvGen.ar(
         Env.new([10e-10, 1, 10e-10], [0.01, decay], 'exp'),
         t_trig);
-      waves = [Saw.ar(freq, volEnv), Pulse.ar(freq, 0.5, volEnv)];
+      waves = [Saw.ar(Lag.kr(freq, glide), volEnv), Pulse.ar(Lag.kr(freq, glide), 0.5, volEnv)];
       voice = RLPF.ar(
         Select.ar(wave, waves),
         cutoff + (filEnv * envelope),
