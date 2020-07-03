@@ -143,7 +143,8 @@ Narwhal {
     var sound = switch(args[0],
       0, { \kick },
       1, { \snare },
-      2, { \hat },
+      2, { \closedHat },
+      3, { \openHat },
     );
     if (sound.notNil, {
       logger.debug("Triggering 808 -> %".format(sound));
@@ -214,7 +215,15 @@ Narwhal {
     this.addGlobalFXParam(1, \reverbRoom, {|v| (v/35);});
     this.addGlobalFXParam(2, \reverbDamping, {|v| (v/35);});
 
-    this.add808Param(0, \kick, \decay, {|v| (v/35);});
+    this.add808Param(0, \kick, \freq, {|v| (v * 6);});
+    this.add808Param(1, \kick, \decay, {|v| v/35;});
+    this.add808Param(2, \kick, \tone, {|v| v/35;});
+    this.add808Param(3, \snare, \duration, {|v| (v + 1)/35;});
+    this.add808Param(4, \snare, \cut_freq, {|v| (v + 1) * 300;});
+    this.add808Param(5, \closedHat, \duration, {|v| (v + 1)/35;});
+    this.add808Param(6, \closedHat, \cut_freq, {|v| (v + 1) * 300;});
+    this.add808Param(7, \openHat, \duration, {|v| (v + 1)/35;});
+    this.add808Param(8, \openHat, \cut_freq, {|v| (v + 1) * 300;});
   }
 
   addSynthParam { | n, name, func |
@@ -256,35 +265,28 @@ Narwhal {
     //shaperBuffer = Buffer.alloc(s, 512, 1, { |buf| buf.chebyMsg([1,0,1,1,0,1])});
     shaperBuffer = Buffer.alloc(s, 512, 1, {arg buf; buf.chebyMsg([0.25,0.5,0.25], false)});
 
-    SynthDef(\narwhalKick, { arg out, t_trig=0, amp=0.5, decay=0.25;
-      var amp_env, phase_env, phase, freq;
+    SynthDef(\narwhalKick, { arg out, t_trig=0, amp=0.5, freq=90, decay=0.25, tone=0.125;
+      var tuned = Rand(-5, 5) + freq;
 
-      freq = 10.rand + 90;
+      var amp_env   = EnvGen.ar(Env.perc(1e-6, decay), t_trig);
+      var phase_env = EnvGen.ar(Env.perc(1e-6, tone), t_trig);
 
-      amp_env   = EnvGen.ar(Env.perc(1e-6,decay), t_trig);
-      phase_env = EnvGen.ar(Env.perc(1e-6,0.125), t_trig);
-
-      phase = SinOsc.ar(20,0,pi) * phase_env;
-      Out.ar(out, SinOsc.ar([freq,1.01*freq],phase) * amp_env * amp);
+      var phase = SinOsc.ar(20,0,pi) * phase_env;
+      Out.ar(out, SinOsc.ar(tuned, phase) * amp_env * amp);
     }).add;
 
-    SynthDef(\narwhalSnare, { arg out, t_trig=0, amp=0.5;
-      var amp_env, cut_freq, dur;
-
-      cut_freq = 3000;
-      dur = [0.0625, 0.125, 0.25].choose;
-
-      amp_env = EnvGen.ar(Env.perc(1e-6, dur), t_trig);
+    SynthDef(\narwhalSnare, { arg out, t_trig=0, amp=0.5, cut_freq=3000, duration=0.125;
+      var amp_env = EnvGen.ar(Env.perc(1e-6, duration), t_trig);
       Out.ar(out, LPF.ar( {WhiteNoise.ar(WhiteNoise.ar)}.dup * amp_env, cut_freq ) * amp);
     }).add;
 
-    SynthDef(\narwhalHat, { arg out, t_trig=0, amp=0.5;
-      var amp_env, cut_freq, dur;
+    SynthDef(\narwhalClosedHat, { arg out, t_trig=0, amp=0.5, duration=0.125, cut_freq=6000;
+      var amp_env = EnvGen.ar(Env.perc(1e-7, duration), t_trig);
+      Out.ar(out, HPF.ar( {WhiteNoise.ar}.dup * amp_env, cut_freq ) * amp / 4);
+    }).add;
 
-      cut_freq = 6000;
-      dur = [0.0625, 0.125, 0.25].choose;
-
-      amp_env = EnvGen.ar(Env.perc(1e-7, dur), t_trig);
+    SynthDef(\narwhalOpenHat, { arg out, t_trig=0, amp=0.5, duration=0.125, cut_freq=6000;
+      var amp_env = EnvGen.ar(Env.perc(1e-7, duration + 0.7), t_trig);
       Out.ar(out, HPF.ar( {WhiteNoise.ar}.dup * amp_env, cut_freq ) * amp / 4);
     }).add;
 
@@ -356,7 +358,8 @@ Narwhal {
     drum808Sounds = Dictionary.new;
     drum808Sounds.put(\kick, Synth(\narwhalKick, [\out, globalBus]));
     drum808Sounds.put(\snare, Synth(\narwhalSnare, [\out, globalBus]));
-    drum808Sounds.put(\hat, Synth(\narwhalHat, [\out, globalBus]));
+    drum808Sounds.put(\closedHat, Synth(\narwhalClosedHat, [\out, globalBus]));
+    drum808Sounds.put(\openHat, Synth(\narwhalOpenHat, [\out, globalBus]));
 
     synth303Voices = voiceCount.collect { | c |
       var voice, synth, fx, voiceBus;
